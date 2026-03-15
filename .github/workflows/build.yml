@@ -1,0 +1,55 @@
+name: Build Flutter APK
+on:
+  workflow_dispatch:
+    inputs:
+      build_id:
+        description: 'Build ID'
+        required: true
+        type: string
+      zip_path:
+        description: 'Path to ZIP file in repo'
+        required: true
+        type: string
+      build_mode:
+        description: 'Build Mode'
+        required: true
+        type: string
+        default: 'release'
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+      - name: Extract ZIP
+        run: |
+          mkdir -p extracted
+          unzip -q "${{ github.event.inputs.zip_path }}" -d extracted/
+          PROJECT_DIR=$(find extracted -name "pubspec.yaml" -exec dirname {} \; | head -1)
+          echo "project_dir=$PROJECT_DIR" >> $GITHUB_ENV
+      - name: Install dependencies
+        working-directory: ${{ env.project_dir }}
+        run: flutter pub get
+      - name: Build APK
+        working-directory: ${{ env.project_dir }}
+        run: |
+          if [ "${{ github.event.inputs.build_mode }}" == "debug" ]; then
+            flutter build apk --debug
+          else
+            flutter build apk --release --split-per-abi
+          fi
+      - name: Upload APK
+        uses: actions/upload-artifact@v3
+        with:
+          name: apk-${{ github.event.inputs.build_id }}
+          path: ${{ env.project_dir }}/build/app/outputs/flutter-apk/*.apk
+          retention-days: 1
